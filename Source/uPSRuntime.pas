@@ -1833,7 +1833,7 @@ type
     {$else}
     /// length in element count
     // - size in bytes = length*ElemSize
-    length: NativeInt;
+    length: {$ifdef CPUX64}NativeInt{$else}LongInt{$endif};
     {$endif}
   end;
   TDynArrayRec = packed record
