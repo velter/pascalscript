@@ -923,6 +923,7 @@ type
     FAllowNoBegin: Boolean;
     FAllowNoEnd: Boolean;
     FAllowUnit: Boolean;
+    FAllowDuplicateRegister : Boolean;
     FBooleanShortCircuit: Boolean;
     FDebugOutput: tbtString;
     FOnExternalProc: TPSOnExternalProc;
@@ -1177,6 +1178,7 @@ type
 	
     property AllowNoEnd: Boolean read FAllowNoEnd write FAllowNoEnd;
 
+    property AllowDuplicateRegister : Boolean read FAllowDuplicateRegister write FAllowDuplicateRegister;
 
     property BooleanShortCircuit: Boolean read FBooleanShortCircuit write FBooleanShortCircuit;
 
@@ -1805,6 +1807,9 @@ const
   RPS_UnknownWarning = 'Unknown warning';
 
 
+  RPS_ClassAlreadyRegistered = 'Class %s already registered';
+  RPS_InterfaceAlreadyRegistered = 'Interface %s already registered';
+  RPS_FunctionAlreadyRegistered = 'Function %s already registered';
   {$IFDEF DEBUG }
   RPS_UnableToRegister = 'Unable to register %s';
   {$ENDIF}
@@ -6035,7 +6040,7 @@ function TPSPascalCompiler.ProcessSub(BlockInfo: TPSBlockInfo): Boolean;
       for i := 0 to arr.count -1 do
       begin
         mType := GetTypeNo(BlockInfo, arr.Item[i]);
-        if (mType <> SetType.SetType) and not (IsIntType(mType.FBaseType) and IsIntType(SetType.SetType.BaseType)) then
+        if mType <> SetType.SetType then
         begin
           with MakeError('', ecTypeMismatch, '') do
           begin
@@ -6053,18 +6058,6 @@ function TPSPascalCompiler.ProcessSub(BlockInfo: TPSBlockInfo): Boolean;
           if not Result then
           begin
             dataval.Free;
-            exit;
-          end;
-          if (c < Low(Byte)) or (c > High(Byte)) then
-          begin
-            with MakeError('', ecTypeMismatch, '') do
-            begin
-              FCol := arr.item[i].Col;
-              FRow := arr.item[i].Row;
-              FPosition := arr.item[i].Pos;
-            end;
-            DataVal.Free;
-            Result := False;
             exit;
           end;
           Set_MakeMember(c, dataval.Data.tstring);
@@ -12271,6 +12264,7 @@ begin
   FParser.OnParserError := ParserError;
   FAutoFreeList := TPSList.Create;
   FOutput := '';
+  FAllowDuplicateRegister := true;
   {$IFDEF PS_USESSUPPORT}
   FAllowUnit := true;
   {$ENDIF}
@@ -13487,6 +13481,9 @@ begin
     if not ParseMethod(Self, '', Decl, DOrgName, pDecl, FT) then
       Raise EPSCompilerException.CreateFmt(RPS_UnableToRegisterFunction, [Decl]);
 
+    if (FindProc(DOrgName)<>InvalidVal) and not(FAllowDuplicateRegister) then
+      Raise EPSCompilerException.CreateFmt(RPS_FunctionAlreadyRegistered, [Decl]);
+
     p := TPSRegProc.Create;
     P.Name := FastUppercase(DOrgName);
     p.OrgName := DOrgName;
@@ -13520,6 +13517,9 @@ var
 begin
   if FProcs = nil then raise EPSCompilerException.Create(RPS_OnUseEventOnly);
   f := FindType(Name);
+  if (f<>nil) and not(FAllowDuplicateRegister) then
+    Raise EPSCompilerException.CreateFmt(RPS_InterfaceAlreadyRegistered, [Name]);
+
   if (f <> nil) and (f is TPSInterfaceType) then
   begin
     result := TPSInterfaceType(f).Intf;
@@ -13556,7 +13556,8 @@ var
 begin
   if FProcs = nil then raise EPSCompilerException.Create(RPS_OnUseEventOnly);
   Result := FindClass(tbtstring(aClass.ClassName));
-  if Result <> nil then exit;
+  if (Result<>nil) and not(FAllowDuplicateRegister) then
+    Raise EPSCompilerException.CreateFmt(RPS_ClassAlreadyRegistered, [aClass.ClassName]);
   f := AddType(tbtstring(aClass.ClassName), btClass);
   Result := TPSCompileTimeClass.CreateC(aClass, Self, f);
   Result.FInheritsFrom := InheritsFrom;
@@ -13571,6 +13572,8 @@ var
 begin
   if FProcs = nil then raise EPSCompilerException.Create(RPS_OnUseEventOnly);
   Result := FindClass(aClass);
+  if (Result<>nil) and not(FAllowDuplicateRegister) then
+    Raise EPSCompilerException.CreateFmt(RPS_ClassAlreadyRegistered, [aClass]);
   if Result <> nil then
   begin
     if InheritsFrom <> nil then
